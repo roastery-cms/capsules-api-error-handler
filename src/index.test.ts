@@ -89,7 +89,11 @@ describe("baristaErrorHandler", () => {
 		it("retorna 400 para InvalidPropertyException", async () => {
 			const { status, body } = await request(
 				createTestApp(
-					new InvalidPropertyException("email", "UserEntity", "formato inválido"),
+					new InvalidPropertyException(
+						"email",
+						"UserEntity",
+						"formato inválido",
+					),
 				),
 			);
 			expect(status).toBe(400);
@@ -111,7 +115,10 @@ describe("baristaErrorHandler", () => {
 				createTestApp(new BadRequestException("UserController")),
 			);
 			expect(status).toBe(400);
-			expect(body).toMatchObject({ source: "UserController", layer: "application" });
+			expect(body).toMatchObject({
+				source: "UserController",
+				layer: "application",
+			});
 		});
 
 		it("retorna 401 para UnauthorizedException", async () => {
@@ -255,7 +262,10 @@ describe("baristaErrorHandler", () => {
 		it("retorna message, name, source e layer no corpo", async () => {
 			const { body } = await request(
 				createTestApp(
-					new BadRequestException("UserController", "campo obrigatório ausente"),
+					new BadRequestException(
+						"UserController",
+						"campo obrigatório ausente",
+					),
 				),
 			);
 			expect(body).toMatchObject({
@@ -267,9 +277,7 @@ describe("baristaErrorHandler", () => {
 		});
 
 		it("usa status 500 como fallback quando a exceção não está mapeada", async () => {
-			const { status } = await request(
-				createTestApp(new UnknownException()),
-			);
+			const { status } = await request(createTestApp(new UnknownException()));
 			expect(status).toBe(500);
 		});
 	});

@@ -1,222 +1,115 @@
-# @roastery/terroir
+# @roastery-capsules/api-error-handler
 
-Layered exception hierarchy and runtime schema validation for the [Roastery CMS](https://github.com/roastery-cms) ecosystem.
+Centralized API error handling and HTTP status code mapping for the [Roastery CMS](https://github.com/roastery-cms) ecosystem.
 
 [![Checked with Biome](https://img.shields.io/badge/Checked_with-Biome-60a5fa?style=flat&logo=biome)](https://biomejs.dev)
 
 ## Overview
 
-**terroir** provides two core primitives for building robust, type-safe TypeScript applications:
-
-- **Exception hierarchy** — A structured, symbol-tagged exception system organized by architectural layer (Domain, Application, Infrastructure), designed for Clean Architecture and DDD applications.
-- **Schema validation** — A runtime validation and coercion engine built on [TypeBox](https://github.com/sinclairzx81/typebox), with support for custom string formats like UUID v7, slug, email, and more.
+`baristaErrorHandler` is an [Elysia](https://elysiajs.com) plugin that intercepts all exceptions thrown in your application and maps them to the appropriate HTTP status codes. It natively understands the layered exception hierarchy from [`@roastery/terroir`](https://github.com/roastery-cms/terroir), returning structured error responses with full layer context.
 
 ## Technologies
 
 | Tool | Purpose |
 |------|---------|
-| [TypeBox](https://github.com/sinclairzx81/typebox) | Runtime schema validation and TypeScript type inference |
-| [uuid](https://github.com/uuidjs/uuid) | UUID v7 format validation |
-| [tsup](https://tsup.egoist.dev) | Bundling to ESM + CJS with `.d.ts` generation |
+| [Elysia](https://elysiajs.com) | HTTP framework and plugin system |
+| [@roastery/barista](https://github.com/roastery-cms) | Elysia factory used across the Roastery ecosystem |
+| [@roastery/terroir](https://github.com/roastery-cms/terroir) | Layered exception hierarchy |
 | [Bun](https://bun.sh) | Runtime, test runner, and package manager |
-| [Knip](https://knip.dev) | Unused exports and dependency detection |
-| [Husky](https://typicode.github.io/husky) + [commitlint](https://commitlint.js.org) | Git hooks and conventional commit enforcement |
+| [tsup](https://tsup.egoist.dev) | Bundling to ESM + CJS with `.d.ts` generation |
 
 ## Installation
 
 ```bash
-bun add @roastery/terroir
+bun add @roastery-capsules/api-error-handler
 ```
 
-**Peer dependencies** (install alongside):
+Peer dependencies:
 
 ```bash
-bun add @sinclair/typebox uuid
+bun add @roastery/barista @roastery/terroir
 ```
 
----
+## Usage
 
-## Exceptions
-
-All exceptions extend `CoreException` and carry a Symbol-tagged `[ExceptionLayer]` property for runtime layer detection.
+Register the plugin on your Elysia app:
 
 ```typescript
-import { ExceptionLayer } from '@roastery/terroir/exceptions/symbols';
+import { Elysia } from "elysia";
+import { baristaErrorHandler } from "@roastery-capsules/api-error-handler";
 
-function handleError(err: unknown) {
-  if (err instanceof Error && ExceptionLayer in err) {
-    const layer = (err as any)[ExceptionLayer]; // 'application' | 'domain' | 'infra' | 'internal'
-    console.log(`Error from layer: ${layer}`);
-  }
+const app = new Elysia()
+  .use(baristaErrorHandler)
+  .get("/users/:id", ({ params }) => {
+    throw new ResourceNotFoundException("UserRepository", `User ${params.id} not found`);
+  })
+  .listen(3000);
+```
+
+The plugin registers a **global** error handler, so all routes and sub-apps are covered automatically.
+
+### Response format
+
+**CoreException** (any `@roastery/terroir` exception):
+
+```json
+{
+  "name": "Resource Not Found",
+  "message": "User 123 not found",
+  "source": "UserRepository",
+  "layer": "application"
 }
 ```
 
-### Application layer
+**Generic error** (any other `Error` or thrown value):
 
-Errors related to business logic, request handling, and user input.
-
-```typescript
-import { BadRequestException } from '@roastery/terroir/exceptions/application';
-
-throw new BadRequestException('Invalid input', 'UserController');
+```json
+{
+  "name": "Error",
+  "message": "something went wrong",
+  "code": "UNKNOWN"
+}
 ```
 
-| Class | When to use |
-|-------|-------------|
-| `BadRequestException` | Invalid or malformed input |
-| `UnauthorizedException` | Authentication required or failed |
-| `InvalidOperationException` | Operation not allowed in current state |
-| `ResourceNotFoundException` | Requested resource does not exist |
-| `ResourceAlreadyExistsException` | Duplicate resource creation attempt |
-| `InvalidJwtException` | JWT token is invalid |
-| `UnableToSignPayloadException` | JWT signing failed |
+## Status code mapping
 
 ### Domain layer
 
-Errors from domain model constraint violations.
+| Exception | Status |
+|---|---|
+| `InvalidDomainDataException` | 400 |
+| `InvalidPropertyException` | 400 |
+| `OperationFailedException` | 406 |
 
-```typescript
-import { InvalidPropertyException } from '@roastery/terroir/exceptions/domain';
+### Application layer
 
-throw new InvalidPropertyException('email', 'UserEntity');
-```
-
-| Class | When to use |
-|-------|-------------|
-| `InvalidDomainDataException` | Domain invariant violated |
-| `InvalidPropertyException` | Entity property failed validation |
-| `OperationFailedException` | Domain operation could not complete |
+| Exception | Status |
+|---|---|
+| `BadRequestException` | 400 |
+| `InvalidJWTException` | 400 |
+| `UnauthorizedException` | 401 |
+| `ResourceNotFoundException` | 404 |
+| `InvalidOperationException` | 406 |
+| `ResourceAlreadyExistsException` | 409 |
+| `UnableToSignPayloadException` | 500 |
 
 ### Infrastructure layer
 
-Errors from external services and I/O operations.
+| Exception | Status |
+|---|---|
+| `ResourceNotFoundException` | 404 |
+| `ConflictException` | 409 |
+| `OperationNotAllowedException` | 502 |
+| `DatabaseUnavailableException` | 503 |
+| `MissingPluginDependencyException` | 503 |
+| `CacheUnavailableException` | 503 |
+| `ForeignDependencyConstraintException` | 500 |
+| `UnexpectedCacheValueException` | 500 |
+| `InvalidEnvironmentException` | 500 |
 
-```typescript
-import { DatabaseUnavailableException } from '@roastery/terroir/exceptions/infra';
+### Internal layer
 
-throw new DatabaseUnavailableException('PostgresRepository');
-```
-
-| Class | When to use |
-|-------|-------------|
-| `DatabaseUnavailableException` | Database connection failed |
-| `CacheUnavailableException` | Cache service unreachable |
-| `UnexpectedCacheValueException` | Cache returned unexpected data |
-| `ConflictException` | Unique constraint violation |
-| `ForeignDependencyConstraintException` | Foreign key constraint violation |
-| `ResourceNotFoundException` | Record not found in data store |
-| `OperationNotAllowedException` | Operation rejected by data store |
-| `InvalidEnvironmentException` | Missing or invalid environment config |
-| `MissingPluginDependencyException` | Required plugin not registered |
-
-### Internal exceptions
-
-Rarely used directly — reserved for framework-level error handling.
-
-```typescript
-import { UnknownException, InvalidEntityData, InvalidObjectValueException } from '@roastery/terroir/exceptions';
-```
-
-### Base classes and type utilities
-
-```typescript
-// Extend these to create your own layer-specific exceptions
-import { ApplicationException, DomainException, InfraException } from '@roastery/terroir/exceptions/models';
-
-// Type utilities for mapping exception constructors by layer
-import type { RoasteryExceptionKeysByLayer, RoasteryExceptionKeys, RoasteryExceptionRecords } from '@roastery/terroir/exceptions/types';
-```
-
----
-
-## Schema Validation
-
-```typescript
-import { Schema } from '@roastery/terroir/schema';
-import { Type } from '@sinclair/typebox';
-
-// Importing the schema module also registers all custom formats
-const UserSchema = new Schema(
-  Type.Object({
-    id: Type.String({ format: 'uuid' }),
-    email: Type.String({ format: 'email' }),
-    slug: Type.String({ format: 'slug' }),
-    createdAt: Type.String({ format: 'date-time' }),
-  })
-);
-
-// Validate input
-if (UserSchema.match(data)) {
-  // data is typed as Static<typeof UserSchema>
-}
-
-// Coerce and clean input (removes extra properties, applies defaults)
-const user = UserSchema.map(rawInput);
-
-// Serialize schema to JSON string
-const json = UserSchema.toString();
-```
-
-### Dynamic schema loading
-
-Load and compile schemas at runtime from JSON strings (e.g., from a database or config file):
-
-```typescript
-import { SchemaManager } from '@roastery/terroir/schema';
-import type { TObject } from '@sinclair/typebox';
-
-const schema = SchemaManager.build<TObject>('{"type":"object","properties":{...}}');
-
-SchemaManager.isSchema(unknownValue); // boolean
-```
-
-### Available string formats
-
-Automatically registered when importing `@roastery/terroir/schema`:
-
-| Format | Description |
-|--------|-------------|
-| `uuid` | UUID v7 |
-| `email` | Email address (RFC 5322) |
-| `url` | Full URL with valid hostname |
-| `simple-url` | Basic URL (no hostname requirement) |
-| `slug` | URL slug (`kebab-case-only`) |
-| `date-time` | ISO 8601 date-time string |
-| `json` | Valid JSON string |
-
----
-
-## Exports reference
-
-```typescript
-import { t, uuid } from '@roastery/terroir';                    // TypeBox and uuid namespaces (re-exports)
-import { ... } from '@roastery/terroir/exceptions';             // internal exceptions (rare)
-import { ... } from '@roastery/terroir/exceptions/application'; // application layer
-import { ... } from '@roastery/terroir/exceptions/application/jwt'; // JWT exceptions
-import { ... } from '@roastery/terroir/exceptions/domain';      // domain layer
-import { ... } from '@roastery/terroir/exceptions/infra';       // infra layer
-import { ... } from '@roastery/terroir/exceptions/models';      // base classes
-import { ... } from '@roastery/terroir/exceptions/symbols';     // ExceptionLayer symbol
-import type { ... } from '@roastery/terroir/exceptions/types';  // type utilities
-import { ... } from '@roastery/terroir/schema';                 // Schema + SchemaManager
-```
-
-### Re-exports
-
-`t` and `uuid` are re-exported for convenience, so you don't need to import them separately:
-
-```typescript
-import { t, uuid } from '@roastery/terroir';
-
-const UserSchema = t.Object({
-  id: t.String({ format: 'uuid' }),
-  name: t.String(),
-});
-
-const id = uuid.v7();
-```
-
----
+All internal exceptions (`InvalidEntityData`, `InvalidObjectValueException`, `UnknownException`) map to **500**.
 
 ## Development
 

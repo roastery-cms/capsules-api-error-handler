@@ -1,7 +1,7 @@
 {
 	"name": "@roastery-capsules/api-error-handler",
 	"description": "Centralized API error handling and HTTP status code mapping for the Roastery CMS ecosystem.",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"author": {
 		"name": "Alan Reis",
@@ -10,7 +10,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/roastery-cms/terroir"
+		"url": "https://github.com/roastery-cms/capsules-api-error-handler"
 	},
 	"license": "MIT",
 	"main": "./dist/index.cjs",
@@ -24,12 +24,14 @@
 		}
 	},
 	"keywords": [
-		"hoyasumii",
 		"roastery",
-		"@roastery",
-		"terroir",
-		"@roastery/terroir",
-		"roastery-terroir"
+		"elysia",
+		"elysia-plugin",
+		"api-error-handler",
+		"error-handling",
+		"http-status",
+		"exception",
+		"caffeine"
 	],
 	"exports": {
 		".": {
@@ -66,8 +68,7 @@
 		"@sinclair/typebox": ">= 0.34.0 < 1",
 		"@types/bun": "latest",
 		"tsup": "^8.5.1",
-		"typescript": "^5",
-		"uuid": "^13.0.0"
+		"typescript": "^5"
 	},
 	"dependencies": {}
 }
